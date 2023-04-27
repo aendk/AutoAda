@@ -1,15 +1,16 @@
 # AutoAda
 This repository contains the result of my Master's thesis, _Adaptive Parameter Management in Machine Learning Systems_.
 This repository has a big overlap to [AdaPM-PyTorch-apps](https://github.com/alexrenz/AdaPM-PyTorch-apps), to which I contributed as part of my work as a research assistant.
-My main system contribution can be found in the ```auto_ada``` folder, ```ctr``` and ```gcn``` are the AdaPM use-cases ported to regular PyTorch. 
+My main system contribution can be found in the ```auto_ada``` folder.
+The folders ```ctr``` and ```gcn``` are the AdaPM use-cases ported to regular PyTorch models. 
 
 
 ## Overview & Motivation
 Training on AdaPM requires non-trivial modifications to existing codebases. 
 
- Models and training scripts need to be manually adapted  for AdaPM.
-This requires in-depth knowledge of the model in question, in distributed computing and the underlying mechanisms of  AdaPM.
-This is a substantial barrier for others to start using AdaPM.
+Models and training scripts need to be manually adapted for AdaPM.
+This requires in-depth knowledge of the model in question, in distributed computing and the underlying mechanisms of AdaPM.
+This is a substantial barrier for others to start using this distributed training backend.
 
 My thesis therefore centered on removing those barriers. 
 I created _AutoAda_ to automatically transform any PyTorch model, 
