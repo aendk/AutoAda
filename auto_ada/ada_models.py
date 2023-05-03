@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.nn import init, Parameter
+from torch.nn import Parameter
 import adaps
-import math
 import sys
 
 from auto_ada.optimizer import PSOptimizer
@@ -66,7 +65,7 @@ class AdaModel(nn.Module):
 
     def intent(self, start=0, stop=sys.maxsize):
 
-        num_parameters = sum(1 for i in self.parameters())
+        num_parameters = sum(1 for _ in self.parameters())
         keys = torch.arange(num_parameters) + self.key_offset
         if start == 0 and stop == sys.maxsize:
             print(f"perpetual intent on dense param keys={keys}")
@@ -86,7 +85,7 @@ class AdaModel(nn.Module):
         return self.user_model(*args, **kwargs)
 
     def lens(self):
-        lens = torch.tensor([param.flatten().shape[0] for param in self.parameters()], dtype=torch.int64) * 2  # twice for optim params
+        lens = torch.tensor([param.flatten().shape[0] for param in self.parameters()], dtype=torch.int64) * 2  # *2 as 2 copies per param exist for optimizer steps.
         for module in self.user_model.modules():
             if module != self.user_model and hasattr(module, "lens"):
                 lens = torch.cat((lens, module.lens()))
@@ -102,20 +101,18 @@ class PSEmbedding(nn.Module):
         self,
         num_embeddings: int = 1024,
         embedding_dim: int = 512,
-        padding_idx: int = -1,  # if set to something greater, zero the respective values + optimizer-vals
         max_size: int = 2**20
     ) -> None:
         super().__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self._buffer = None
-        self.padding_idx = -1  # disabled for now.padding_idx
         self.max_size = max_size
         self.kv = None
         self.opt = None
         self.key_offset = -1
 
-    def kv_init(self, kv: adaps.Worker, key_offset=0, opt: PSOptimizer = None, init_vals=True, kaiming=False):
+    def kv_init(self, kv: adaps.Worker, key_offset=0, opt: PSOptimizer = None, init_vals=True):
         self.kv = kv
         self.key_offset = key_offset
         self.opt = opt
@@ -174,7 +171,7 @@ class PSEmbedding(nn.Module):
         return hook
 
     def lens(self):
-        return torch.ones(self.num_embeddings, dtype=torch.int64) * self.embedding_dim * 2  # twice embedding_dim for optim params
+        return torch.ones(self.num_embeddings, dtype=torch.int64) * self.embedding_dim * 2
 
     def extra_repr(self):
        return f"PSEmbedding(num_embeddings={self.num_embeddings}, embedding_dim={self.embedding_dim}"
@@ -183,7 +180,9 @@ class PSEmbedding(nn.Module):
 def clip_grad_norm(
         grad: torch.Tensor, max_norm: float, norm_type: float = 2.0,
         error_if_nonfinite: bool = False) -> torch.Tensor:
-    r"""Clips gradient norm of a tensor, based on torch.clip_grad_norm_. Works slightly different than the original clip_grad_norm_: does not work in place, returns the clipped gradient instead, and does not support all norms (e.g., 0-norm is not supported) """
+    r"""Clips gradient norm of a tensor, based on torch.clip_grad_norm_.
+    Works slightly different than the original clip_grad_norm_: does not work in place,
+    returns the clipped gradient instead, and does not support all norms (e.g., 0-norm is not supported) """
     max_norm = float(max_norm)
     norm_type = float(norm_type)
     device = grad.device

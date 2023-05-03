@@ -49,6 +49,7 @@ class ReduceLROnPlateau(object):
         self.best = None
         self.num_bad_epochs = None
         self.mode_worse = None  # the worse value for the chosen mode
+        self._last_lr = None
         self.eps = eps
         self.last_epoch = 0
         self._init_is_better(mode=mode, threshold=threshold, threshold_mode=threshold_mode)

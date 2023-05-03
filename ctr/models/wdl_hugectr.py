@@ -1,5 +1,4 @@
 import torch
-from numpy.lib.function_base import _parse_input_dimensions
 from torch import nn
 from .wide import Wide
 
@@ -12,16 +11,17 @@ class WdlHugeCtr(nn.Module):
     and HugeCTR's implementation as detailed in https://github.com/NVIDIA-Merlin/HugeCTR/blob/master/samples/wdl/wdl.py
     """
 
-    def __init__(self, feature_dim, embed_dim, output_dim=256):  # wide_in_dim, wide_out_dim, hardcoded for now
+    def __init__(self, feature_dim, embed_dim):
         super().__init__()
         self.flatten = nn.Flatten()
         self.relu = nn.ReLU()
+        self.wide_embeddings = None
 
         # wide component; corresponding to layer SparseEmbedding2
         self.wide = Wide(input_dim=feature_dim, pred_dim=1)
 
         if embed_dim != 16:
-            print(f" Warning: embed_dim={embed_dim} HugeCtr's example uses embed_dim=16. \n"
+            print(f" Warning: embed_dim={embed_dim} HugeCTR's example uses embed_dim=16. \n"
                   f"output_dim ignored")
 
         # deep components
@@ -45,7 +45,6 @@ class WdlHugeCtr(nn.Module):
         return regularization_loss
 
     def forward(self, data):
-        # dense_features, sparse_features = data[0], data[1]
         # wide component
         wide_result, self.wide_embeddings = self.wide(data[1])
 
