@@ -119,10 +119,10 @@ def init_dataloaders(data_root_dir, batch_size, num_workers=2):
 
 
 def init_distributed_dataloaders(rank: int,
-                         world_size: int,
-                         data_root_dir: str,
-                         batch_size: int,
-                         num_workers: int) -> Tuple[DataLoader, DataLoader]:
+                                 world_size: int,
+                                 data_root_dir: str,
+                                 batch_size: int,
+                                 num_workers: int) -> Tuple[DataLoader, DataLoader]:
     training_data, test_data = load_data(data_root_dir)
     # Create data loaders.
     sampler = DistributedSampler(training_data,

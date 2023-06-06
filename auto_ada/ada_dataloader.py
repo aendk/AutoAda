@@ -2,21 +2,16 @@ from collections import deque
 import queue
 import copy
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
 import auto_ada.utils as utils
-import auto_ada.ada_models as adamodels
 from typing import Any, Callable, Iterable, TypeVar, Generic, Sequence, List, Optional, Union
 
 
-# TODO think of a better name. prep_model_for_simulation()?
 def create_intent_sim_model(model, simulation_input_queue):
   """
   This function takes a model and replaces every nn.layer with either a MockLayer or PSEmbedding.
   This model is then used to simulate the forward pass with minimal overhead.
   """
-  # this does not strictly belong to the dataloader.
-  # could be  moved to diff file (e.g. in utils/)
 
   utils.recursive_wrap_children(model, simulation_input_queue)
   return model
@@ -31,6 +26,7 @@ class AdaPSDataLoader:
     self.simulation_input_queue = queue.Queue()  # simulated forward pass publishes input data of each relevant layer in this queue.
     self.distance_between_intent_and_use = intent_ahead
     self.clock = 0  # needed to associate batches to adaps-clocks to send intents signals with correct timestamps.
+    self.ada_lname_get_keys_fn_tuples = None
 
     if ada_lname_get_keys_fn_tuples is not None:
       # prep-work for manual get key functions.
@@ -40,7 +36,7 @@ class AdaPSDataLoader:
       self.automatic_get_keys = True
       self.prep_auto_gk(u_model)
 
-    self.last_user_batch_mods_fn = last_user_batch_mods_fn  # in lieu of overwriting collate_fn
+    self.last_user_batch_mods_fn = last_user_batch_mods_fn
     if last_user_batch_mods_fn is None:
       print("last_user_batch_mods_fn is not supplied. This means that Intent Signaling does only work if the batch is not modified in any shape or form after collate_fn. "
             "Except are moving operations like .to(device)")
@@ -48,7 +44,7 @@ class AdaPSDataLoader:
     self.user_dataloader = u_dl
 
   def prep_auto_gk(self, u_model):
-    u_model = utils.strip_kv_from_model(u_model)  # strip kv to deepcopy it.
+    u_model = utils.strip_kv_from_model(u_model)  # strip kv to deepcopy the model, as kv cannot be copied
     self.user_model = copy.deepcopy(u_model)
     utils.add_kv_to_model(u_model, self.kv)  # add kv to original model again.
 
@@ -84,7 +80,7 @@ class AdaPSDataLoader:
 
   def simulate_batch_execution(self, batch):
 
-    self.user_model.train()  # model.eval also available
+    self.user_model.train()
     if self.simulation_input_queue.qsize() != 0:
       raise ValueError(f"AdaDL batch simulation queue needs to be empty in between clocks, but qsize={self.simulation_input_queue.qsize()}")
 
@@ -92,10 +88,11 @@ class AdaPSDataLoader:
       batch = self.last_user_batch_mods_fn(batch)
 
     try:
-      _ = self.user_model(batch)  # currently, the simulation step/ simulated forward pass errors out. 
+      _ = self.user_model(batch)
+      # currently, the simulation step/ simulated forward pass errors out.
       # this is caused because we cannot escape operations like torch.cat() with our current approach.
       # We present modifications to remedy this in the thesis.
-    except Exception as exc:
+    except Exception:
       pass
 
   def dispatch_intents(self, keys, key_offset, intent_clock):
@@ -107,14 +104,14 @@ class AdaPSDataLoader:
     Manual intents: calls the getkey-function + dispatches intents.
     Auto intents: Simulates the forward-pass of this batch using the mock-model;
     in which each layer does no computation, but it can report what input is received.
-    For Embeddings, this directly correlates to the access.
+    For Embeddings, this directly correlates to the parameter access.
     """
     if not self.automatic_get_keys:
-      for tuple in self.ada_lname_get_keys_fn_tuples:
-        self.dispatch_intents(tuple[1](batch), tuple[0], intent_clock)
+      for gk_tuple in self.ada_lname_get_keys_fn_tuples:
+        self.dispatch_intents(gk_tuple[1](batch), gk_tuple[0], intent_clock)
 
     else:
-      self.simulate_batch_execution(batch)  # filling the queue
+      self.simulate_batch_execution(batch)
 
       # reading the queue
       while not self.simulation_input_queue.empty():
@@ -132,22 +129,13 @@ class AdaPSDataLoader:
       return
 
   def __next__(self):
-
-      # Adding MultiProcessing: completely sidestep getting data in main thread; offload everything onto separate process.
-    #  separate process actively waits & works when queue-len decreases
-    # query original Dataloader + put batch into queue, until the original DL is exhausted / raises StopIteration
     self.load_batch_into_queue()
 
-    # get batch out of queue
     try:
       return self.batch_queue.popleft()
 
-    # except queue.Empty:
     except IndexError:
       raise StopIteration
 
   def __len__(self) -> int:
     return len(self.user_dataloader)
-
-  def __del__(self):
-    pass  # prep-work for multiprocessing here. Terminate the simulation-thread here.

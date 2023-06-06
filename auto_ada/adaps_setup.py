@@ -1,7 +1,6 @@
 import os
 import torch
 import adaps
-import sys
 from threading import Thread
 from torch import cuda
 from torch.multiprocessing import Process, set_start_method
@@ -9,14 +8,6 @@ from torch.multiprocessing import Process, set_start_method
 from signal import signal, SIGINT
 
 from auto_ada.optimizer import PSAdagrad
-
-def init_scheduler(dummy, args):
-    os.environ['DMLC_NUM_SERVER'] = str(args.world_size)
-    os.environ['DMLC_ROLE'] = 'scheduler'
-    os.environ['DMLC_PS_ROOT_URI'] = args.root_uri
-    os.environ['DMLC_PS_ROOT_PORT'] = args.root_port
-    print("running scheduler")
-    adaps.scheduler(args.num_keys, args.workers_per_node)
 
 
 def init_scheduler(dummy, args):

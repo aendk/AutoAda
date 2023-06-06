@@ -9,7 +9,7 @@ from dgl import save_graphs, load_graphs
 from cli import parse_arguments
 
 
-class PartitionedOGBDataset():
+class PartitionedOGBDataset:
     def __init__(self, name, parts, root="dataset"):
         self.name = name
         self.parts = parts

@@ -1,6 +1,5 @@
 import torch
 import time
-import os
 import torch.nn as nn
 import tqdm
 import sys
@@ -13,10 +12,12 @@ from auto_ada.ada_dataloader import AdaPSDataLoader
 from sklearn.metrics import log_loss
 import cProfile
 
+
 def run_worker(worker_id, args, kv):
     train(worker_id, args, kv)
     kv.barrier()  # wait for all workers to finish
     kv.finalize()
+
 
 def run_eval(model, test_dl, args, epoch):
     # file name of best performing permutation of this model, e.g. CriteoNetwork_best_model.pt
@@ -46,7 +47,7 @@ def run_eval(model, test_dl, args, epoch):
             args.best_loss = float('inf')
         if args.save_model and args.best_loss > avg_test_logloss:
             args.best_loss = avg_test_logloss
-            #torch.save(model.state_dict(), best_model_path)
+            torch.save(model.state_dict(), best_model_path)
 
         return avg_test_logloss_bce
 
@@ -63,7 +64,7 @@ def train(worker_id, args, kv):
     print(f"Worker {worker_id} training on {args.device} with {torch.get_num_threads()} threads")
     # Initialize distributed training context.
 
-    kv.begin_setup()  # TODO imo this whole block could be moved to the AdaModel entirely.
+    kv.begin_setup()
     model = args.model
     torch.manual_seed(args.model_seed)
     model.kv_init(kv, 0, args.opt, worker_id == 0, args.intent_ahead > 0)
@@ -135,10 +136,9 @@ def train(worker_id, args, kv):
 
                 tq.set_postfix({'loss': '%.04f' % loss.item(), 'reg_loss': '%.04f' % reg_loss.item()}, refresh=False)
 
-
         # synchronize replicas
         print(f"worker {worker_id} finished epoch {epoch+1} in {time.time()-epoch_start}. Avg train loss: {total_train_loss/num_batches}. Avg reg loss: {total_reg_loss/num_batches}", flush=True)
-        kv.wait_sync()  #  this triple can be substituted w/ model.end_epoch()
+        kv.wait_sync()  #  this triplet can be substituted w/ model.end_epoch()
         kv.barrier()
         kv.wait_sync()
         epoch_stop = time.time()
@@ -172,8 +172,6 @@ def train(worker_id, args, kv):
 if __name__ == "__main__":
     args = parse_arguments()
 
-
-    # the model
     criteo_model = wdl_hugectr.WdlHugeCtr(args.feature_dim, args.embedding_dim)
     args.model = AdaModel(criteo_model)
 

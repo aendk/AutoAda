@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import tqdm
 from dgl.nn import GraphConv
 import time
-import adaps
 from cli import parse_arguments
 from data import PartitionedOGBDataset
 from auto_ada.ada_models import AdaModel
@@ -26,8 +25,6 @@ class Model(nn.Module):
         self.h_feats = h_feats
 
     def forward(self, data):
-    #     def forward(self, mfgs, inputs): # TODO this should be doable, fix why it does not work.
-    #     mfgs, inputs = data[1], data[0]
         inputs = data[0]
         mfgs = data[1]
         h = self.conv1(mfgs[0], inputs)
@@ -52,6 +49,7 @@ def get_keys_gcn(data):
     # the function has to return the relevant key_offset and the data which the layer will see.
     input_nodes, _, _ = data
     return input_nodes
+
 
 def train(worker_id, args, kv):
     print(f"Worker {worker_id} training on {args.device} with {torch.get_num_threads()} threads")
@@ -117,7 +115,6 @@ def train(worker_id, args, kv):
         train_dataloader = AdaPSDataLoader(args.model, train_dataloader, args.intent_ahead, ada_lname_get_keys_fn_tuples=layer_get_key_tuple, last_user_batch_mods_fn=batch_mod)
         valid_dataloader = AdaPSDataLoader(args.model, valid_dataloader, args.intent_ahead, ada_lname_get_keys_fn_tuples=layer_get_key_tuple, last_user_batch_mods_fn=batch_mod)
 
-
     # full replication
     if args.enforce_full_replication > 0:
         print(f"Enforcing full replication: signal intent for keys 0..{args.num_keys} in time [0, {sys.maxsize}]")
@@ -142,13 +139,11 @@ def train(worker_id, args, kv):
         with tqdm.tqdm(train_dataloader, position=worker_id, disable=(not args.progress_bar)) as tq:
 
             for step, batch in enumerate(tq):
-                # input_nodes, mfgs = batch_mod(batch)
                 batch = batch_mod(batch)
 
-                mfgs = batch[1]  # TODO discuss with alex
+                mfgs = batch[1]
                 labels = mfgs[-1].dstdata['label'].long()
-                # predictions = model(mfgs, input_nodes)  # TODO discuss with alex, really common pattern, no clear solution
-                predictions = model(batch)  # according to nov7-meeting, this is fine, but not user friendly.
+                predictions = model(batch)
 
                 loss = F.cross_entropy(predictions, labels)
                 loss.backward()
@@ -176,7 +171,6 @@ def train(worker_id, args, kv):
                 for input_nodes, output_nodes, mfgs in tq:
                     inputs = mfgs[0].srcdata['_ID']
                     labels.append(mfgs[-1].dstdata['label'].long().cpu().numpy())
-                    # predictions.append(model(mfgs, inputs).argmax(1).cpu().numpy()) # TODO discuss with alex
                     predictions.append(model([inputs, mfgs]).argmax(1).cpu().numpy())
                 predictions = np.concatenate(predictions)
                 labels = np.concatenate(labels)
